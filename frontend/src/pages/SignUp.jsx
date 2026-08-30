@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth } from '../services/api';
-import { setAuth } from '../utils/auth';
 
 export default function SignUp() {
   const navigate = useNavigate();
@@ -23,11 +22,9 @@ export default function SignUp() {
     setLoading(true);
     try {
       const data = await auth.signup({ name: form.name, email: form.email, regNo: form.regNo, password: form.password });
-      setAuth({
-        token: data.token, name: data.user?.name || form.name, email: data.user?.email || form.email,
-        role: data.user?.role || 'student', userId: data.user?.id, regNo: data.user?.regNo,
-      });
-      navigate('/portal');
+      // Remove setAuth here since they need to verify OTP first
+      localStorage.setItem('verifyEmail', form.email);
+      navigate('/verify-otp', { state: { email: form.email } });
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   };

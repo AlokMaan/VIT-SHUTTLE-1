@@ -30,6 +30,7 @@ const shuttleSchema = new mongoose.Schema({
     lat: { type: Number, default: 12.9716 },
     lng: { type: Number, default: 79.1589 }
   },
+  currentRoute: { type: mongoose.Schema.Types.ObjectId, ref: 'Route' },
   speed: { type: Number, default: 0 },
   nextStop: { type: String },
   eta: { type: Number, default: 0 },

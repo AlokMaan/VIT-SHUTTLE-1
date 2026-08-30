@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
+const sendEmail = require('../utils/email');
 
 // ── POST /api/auth/signup ─────────────────────────────────────────────────────
 router.post('/signup', async (req, res) => {
@@ -23,20 +24,30 @@ router.post('/signup', async (req, res) => {
 
     const user = await User.create({ name, email, password, regNo, phone, role: assignedRole });
 
-    const token = user.generateToken();
+    // Generate 4 digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    user.otp = otp;
+    user.otpExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save({ validateBeforeSave: false });
+
+    // Always log OTP for development
+    console.log(`\n📧 Signup OTP for ${user.email}: ${otp}\n`);
+
+    // Try sending email, don't fail if SMTP is down
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'VIT Shuttle - Verification Code',
+        otp
+      });
+    } catch (emailErr) {
+      console.error('⚠️  Signup email failed (OTP still valid):', emailErr.message);
+    }
 
     res.status(201).json({
       success: true,
-      message: `Welcome to VIT Shuttle, ${name.split(' ')[0]}! 🎉 Your account is ready.`,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        regNo: user.regNo,
-        phone: user.phone
-      }
+      message: `Account created! Please verify your email.`,
+      email: user.email
     });
   } catch (err) {
     if (err.code === 11000) {
@@ -181,6 +192,102 @@ router.put('/update-profile', protect, async (req, res) => {
     res.json({ success: true, message: 'Profile updated successfully!', user });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to update profile.' });
+  }
+});
+
+// ── POST /api/auth/send-otp ──────────────────────────────────────────────────
+router.post('/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required.' });
+
+    const lowerEmail = email.toLowerCase().trim();
+
+    // Validate VIT email
+    if (!lowerEmail.endsWith('@vit.ac.in') && !lowerEmail.endsWith('@vitstudent.ac.in')) {
+      return res.status(400).json({ success: false, message: 'Only @vit.ac.in or @vitstudent.ac.in emails are accepted.' });
+    }
+
+    // Find or auto-create user
+    let user = await User.findOne({ email: lowerEmail });
+    if (!user) {
+      const name = lowerEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      user = await User.create({ name, email: lowerEmail, role: 'student' });
+    }
+
+    // Generate 4 digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    user.otp = otp;
+    user.otpExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save({ validateBeforeSave: false });
+
+    // Always log OTP to console for development/debugging
+    console.log(`\n📧 OTP for ${lowerEmail}: ${otp}\n`);
+
+    // Try sending email, but don't fail if SMTP is down
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'VIT Shuttle - Verification Code',
+        otp
+      });
+      console.log(`✅ Email sent successfully to ${lowerEmail}`);
+    } catch (emailErr) {
+      console.error('⚠️  Email send failed (OTP still valid, check console above):', emailErr.message);
+      // Don't throw - OTP is still saved and can be verified
+      // In development, users can check the backend console for the OTP
+    }
+
+    res.json({ success: true, message: 'Verification code sent to your email.' });
+  } catch (err) {
+    console.error('Send OTP error:', err);
+    res.status(500).json({ success: false, message: 'Failed to send OTP. Please try again.' });
+  }
+});
+
+// ── POST /api/auth/verify-otp ────────────────────────────────────────────────
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
+
+    const user = await User.findOne({ 
+      email: email.toLowerCase(),
+      otp,
+      otpExpire: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP.' });
+    }
+
+    user.isVerified = true;
+    user.otp = undefined;
+    user.otpExpire = undefined;
+    user.lastLogin = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    const token = user.generateToken();
+
+    res.json({
+      success: true,
+      message: 'Email verified successfully!',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        regNo: user.regNo,
+        phone: user.phone,
+        department: user.department,
+        hostel: user.hostel,
+        isVerified: user.isVerified
+      }
+    });
+  } catch (err) {
+    console.error('Verify OTP error:', err);
+    res.status(500).json({ success: false, message: 'Verification failed.' });
   }
 });
 

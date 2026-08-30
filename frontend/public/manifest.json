@@ -1,0 +1,21 @@
+{
+  "name": "VIT ShuttleAI",
+  "short_name": "ShuttleAI",
+  "description": "Real-time campus shuttle tracking for VIT Vellore",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080c14",
+  "theme_color": "#00d4b8",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["transportation", "education"],
+  "lang": "en",
+  "dir": "ltr"
+}

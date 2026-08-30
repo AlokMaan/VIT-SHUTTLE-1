@@ -44,6 +44,12 @@ export const auth = {
   signup: (payload) =>
     request('/auth/signup', { method: 'POST', body: JSON.stringify(payload) }),
 
+  sendOtp: (email) =>
+    request('/auth/send-otp', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  verifyOtp: (email, otp) =>
+    request('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, otp }) }),
+
   me: () => request('/auth/me'),
 
   updateProfile: (data) =>
@@ -85,6 +91,60 @@ export const admin = {
   updateComplaint: (id, data) => request(`/admin/complaints/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   scanlogs: (page = 1) => request(`/admin/scanlogs?page=${page}`),
   analytics: () => request('/admin/analytics/revenue'),
+  analyticsOverview: () => request('/admin/analytics/overview'),
+
+  // Route CRUD
+  getRoutes: () => request('/admin/routes'),
+  createRoute: (data) => request('/admin/routes', { method: 'POST', body: JSON.stringify(data) }),
+  updateRoute: (id, data) => request(`/admin/routes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRoute: (id) => request(`/admin/routes/${id}`, { method: 'DELETE' }),
+
+  // Stop CRUD
+  getStops: () => request('/admin/stops'),
+  createStop: (data) => request('/admin/stops', { method: 'POST', body: JSON.stringify(data) }),
+  updateStop: (id, data) => request(`/admin/stops/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteStop: (id) => request(`/admin/stops/${id}`, { method: 'DELETE' }),
+
+  // Driver CRUD
+  getDrivers: () => request('/admin/drivers'),
+  createDriver: (data) => request('/admin/drivers', { method: 'POST', body: JSON.stringify(data) }),
+  updateDriver: (id, data) => request(`/admin/drivers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteDriver: (id) => request(`/admin/drivers/${id}`, { method: 'DELETE' }),
+
+  // Shuttle CRUD (enhanced)
+  getShuttles: () => request('/admin/shuttles'),
+  createShuttle: (data) => request('/admin/shuttles', { method: 'POST', body: JSON.stringify(data) }),
+  updateShuttle: (id, data) => request(`/admin/shuttles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteShuttle: (id) => request(`/admin/shuttles/${id}`, { method: 'DELETE' }),
+
+  // Settings
+  getSettings: () => request('/admin/settings'),
+  updateSettings: (settings) => request('/admin/settings', { method: 'PUT', body: JSON.stringify({ settings }) }),
+
+  // Audit Log
+  getAuditLog: (page = 1, action = '', startDate = '', endDate = '') => {
+    const params = new URLSearchParams({ page });
+    if (action) params.append('action', action);
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    return request(`/admin/audit-log?${params}`);
+  },
+
+  // GPS Logs
+  getGpsLogs: (shuttleId = '', startDate = '', endDate = '', page = 1) => {
+    const params = new URLSearchParams({ page });
+    if (shuttleId) params.append('shuttleId', shuttleId);
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    return request(`/admin/gps-logs?${params}`);
+  },
+
+  // Notifications
+  pushNotification: (data) => request('/admin/notifications/push', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Schedule
+  getSchedule: () => request('/admin/schedule'),
+  updateSchedule: (data) => request('/admin/schedule', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // ── Shuttles ──────────────────────────────────────────
@@ -110,4 +170,19 @@ export const complaints = {
   track: (trackingId) => request(`/complaints/track/${trackingId}`),
 };
 
-export default { auth, passes, payments, users, admin, shuttles, card, complaints };
+// ── Public (no auth) ──────────────────────────────────
+export const publicApi = {
+  getRoutes: (search = '') => request(`/public/routes${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  getRoute: (id) => request(`/public/routes/${id}`),
+  getStops: (lat, lng) => {
+    const params = new URLSearchParams();
+    if (lat && lng) { params.append('lat', lat); params.append('lng', lng); }
+    const qs = params.toString();
+    return request(`/public/stops${qs ? `?${qs}` : ''}`);
+  },
+  getLiveShuttles: () => request('/public/shuttles/live'),
+  getAlerts: () => request('/public/alerts'),
+  submitFeedback: (data) => request('/public/feedback', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+export default { auth, passes, payments, users, admin, shuttles, card, complaints, publicApi };

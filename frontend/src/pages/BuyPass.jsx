@@ -326,7 +326,7 @@ export default function BuyPass() {
           </div>
 
           <div style={{ display: 'flex', gap: '.5rem', justifyContent: 'center' }}>
-            <button className="btn btn-primary" onClick={() => navigate('/settings')}>
+            <button className="btn btn-primary" onClick={() => navigate('/portal/settings')}>
               <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>qr_code_2</span> View My Pass
             </button>
             <button className="btn btn-secondary" onClick={() => navigate('/portal')}>

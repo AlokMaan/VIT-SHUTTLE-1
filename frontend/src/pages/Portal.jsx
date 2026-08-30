@@ -1,317 +1,290 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getUserName, getAuth } from '../utils/auth';
-import { users, passes, card as cardApi } from '../services/api';
+import { getAuth, getUserName, getAvatarUrl } from '../utils/auth';
 
-/* ── Hero Slides ── */
-const SLIDES = [
-  {
-    gradient: 'linear-gradient(135deg, #0c1220 0%, #0f3d38 50%, #0d9488 100%)',
-    tag: '🚌 VIT Campus Transit',
-    title: 'Your Smart Shuttle Dashboard',
-    desc: 'Track buses in real-time, buy digital passes, manage your shuttle card — all in one place.',
-    cta: { label: 'Track Shuttle', icon: 'map', to: '/live-map' },
-    cta2: { label: 'Buy Pass', icon: 'shopping_cart', to: '/buy-pass' },
-  },
-  {
-    gradient: 'linear-gradient(135deg, #0c1220 0%, #312e81 50%, #6366f1 100%)',
-    tag: '💳 VIT Shuttle Card',
-    title: 'Tap. Ride. Go.',
-    desc: 'Your digital transit card — add money instantly, earn 2% cashback, and enjoy seamless campus rides.',
-    cta: { label: 'View My Card', icon: 'credit_card', to: '/settings' },
-    cta2: { label: 'Add Money', icon: 'add', to: '/settings' },
-  },
-  {
-    gradient: 'linear-gradient(135deg, #0c1220 0%, #064e3b 50%, #10b981 100%)',
-    tag: '🎟️ Digital Pass System',
-    title: 'QR Pass — No Paper Tickets',
-    desc: 'Buy Daily (₹20), Monthly (₹400), or Yearly (₹3,000) passes. Get instant QR code — show & board.',
-    cta: { label: 'Buy Now', icon: 'shopping_cart', to: '/buy-pass' },
-    cta2: { label: 'View Plans', icon: 'confirmation_number', to: '/settings' },
-  },
-  {
-    gradient: 'linear-gradient(135deg, #0c1220 0%, #713f12 50%, #f59e0b 100%)',
-    tag: '🗺️ Live Route Tracking',
-    title: '3 Routes. 4 Buses. Real-Time.',
-    desc: 'Route Alpha, Beta, Charlie — track every bus live on the map with ETA, stops, and driver info.',
-    cta: { label: 'Open Map', icon: 'map', to: '/live-map' },
-    cta2: { label: 'Schedules', icon: 'event_note', to: '/schedule' },
-  },
+// ── Scroll-reveal hook
+function useScrollReveal(threshold = 0.15) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return [ref, visible];
+}
+
+// ── Animated counter
+function CountUp({ to, duration = 1800, suffix = '' }) {
+  const [val, setVal] = useState(0);
+  const [ref, visible] = useScrollReveal(0.3);
+  useEffect(() => {
+    if (!visible) return;
+    let start = null;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      setVal(Math.round(ease * to));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [visible, to, duration]);
+  return <span ref={ref}>{val.toLocaleString('en-IN')}{suffix}</span>;
+}
+
+const ROUTE_COLOURS = {
+  Alpha:   { color: '#00d4b8', bg: 'rgba(0,212,184,.1)',   stops: ['Main Gate', 'SJT Block', 'SMV Block', 'Tech Tower', "Men's Hostel"] },
+  Beta:    { color: '#7c6dfa', bg: 'rgba(124,109,250,.1)', stops: ['Library / LRC', 'GDN Block', 'MB Labs', 'Annapurna'] },
+  Charlie: { color: '#ff9d4d', bg: 'rgba(255,157,77,.1)',  stops: ['Gate 2 (South)', 'Sports Ground', 'Admin Block', "Women's Hostel"] },
+};
+
+const STATS = [
+  { label: 'Active Buses',    value: 4,    suffix: '',   icon: 'directions_bus', color: 'var(--primary)', glow: 'var(--primary-glow)', desc: 'On campus right now' },
+  { label: 'On-Time Rate',    value: 94,   suffix: '%',  icon: 'speed',          color: 'var(--green)',   glow: 'var(--green-glow)',   desc: 'Last 7 days average' },
+  { label: 'Routes Active',   value: 3,    suffix: '',   icon: 'route',          color: 'var(--accent)',  glow: 'var(--accent-glow)',  desc: 'Alpha · Beta · Charlie' },
+  { label: 'Students Served', value: 2840, suffix: '+',  icon: 'group',          color: 'var(--orange)',  glow: 'var(--orange-glow)',  desc: 'This semester' },
 ];
 
-const FEATURES = [
-  { icon: 'map', title: 'Live Tracking', desc: 'Real-time GPS tracking of all campus shuttles', color: 'blue' },
-  { icon: 'qr_code_2', title: 'QR Pass', desc: 'Digital passes with QR — scan to board', color: 'green' },
-  { icon: 'credit_card', title: 'Shuttle Card', desc: 'Add money, tap & ride, earn cashback', color: 'purple' },
-  { icon: 'schedule', title: 'Smart Schedule', desc: 'Routes, stops, timetables for all buses', color: 'orange' },
-  { icon: 'payment', title: 'Razorpay', desc: 'Secure payments via UPI, Card, NetBanking', color: 'blue' },
-  { icon: 'notifications_active', title: 'Live Alerts', desc: 'Instant notifications for delays & changes', color: 'green' },
+const QUICK_ACTIONS = [
+  { label: 'Live Tracking',  icon: 'location_on',         to: '/portal/live-map', color: 'var(--primary)', bg: 'var(--primary-bg)' },
+  { label: 'Schedule',       icon: 'calendar_month',      to: '/portal/schedule', color: 'var(--accent)',  bg: 'var(--accent-bg)'  },
+  { label: 'Buy Pass',       icon: 'confirmation_number', to: '/portal/buy-pass', color: 'var(--green)',   bg: 'var(--green-bg)'   },
+  { label: 'Fleet Status',   icon: 'directions_bus',      to: '/portal/fleet',    color: 'var(--orange)',  bg: 'var(--orange-bg)'  },
+  { label: 'Alerts',         icon: 'notifications',       to: '/portal/alerts',   color: 'var(--red)',     bg: 'var(--red-bg)'     },
+  { label: 'Support',        icon: 'chat_bubble',         to: '/portal/chat',     color: 'var(--purple)',  bg: 'var(--purple-bg)'  },
 ];
 
-const STEPS = [
-  { num: '01', title: 'Create Account', desc: 'Sign up with @vitstudent.ac.in email', icon: 'person_add' },
-  { num: '02', title: 'Buy Pass or Add Money', desc: 'Choose a pass plan or top-up shuttle card', icon: 'shopping_cart' },
-  { num: '03', title: 'Get QR Code', desc: 'Digital pass with QR generated instantly', icon: 'qr_code_2' },
-  { num: '04', title: 'Board & Ride', desc: 'Show QR or tap card, track bus live', icon: 'directions_bus' },
-];
-
-const ROUTES_INFO = [
-  { name: 'Route Alpha', stops: ['Main Gate', 'SJT Block', 'TT Complex', 'Hostel Zone'], color: '#0d9488', buses: 2, freq: '15 min' },
-  { name: 'Route Beta', stops: ['Library', 'Academic Block', 'Food Court'], color: '#10b981', buses: 1, freq: '20 min' },
-  { name: 'Route Charlie', stops: ['VIT Gate 2', 'Gym Complex', 'Admin Block'], color: '#f59e0b', buses: 1, freq: '20 min' },
+const SCHEDULE_PREVIEW = [
+  { route: 'Alpha',   from: 'Main Gate',  to: "Men's Hostel",    time: '06:00 AM', status: 'On Time' },
+  { route: 'Beta',    from: 'Library',    to: 'Annapurna',        time: '06:30 AM', status: 'On Time' },
+  { route: 'Charlie', from: 'Gate 2',     to: "Women's Hostel",   time: '07:00 AM', status: 'Delayed' },
+  { route: 'Alpha',   from: 'Main Gate',  to: "Men's Hostel",    time: '07:30 AM', status: 'On Time' },
+  { route: 'Beta',    from: 'Library',    to: 'Annapurna',        time: '08:00 AM', status: 'On Time' },
 ];
 
 export default function Portal() {
   const navigate = useNavigate();
-  const name = getUserName();
-  const auth = getAuth();
-  const [greeting, setGreeting] = useState('');
-  const [activePass, setActivePass] = useState(null);
-  const [dashData, setDashData] = useState(null);
-  const [cardData, setCardData] = useState(null);
-  const [slide, setSlide] = useState(0);
-  const timerRef = useRef(null);
+  const userName = getUserName();
+  const heroImgRef = useRef(null);
 
+  // Parallax on scroll
   useEffect(() => {
+    const fn = () => {
+      if (!heroImgRef.current) return;
+      heroImgRef.current.style.transform = `translateY(${window.scrollY * 0.38}px) scale(1.12)`;
+    };
+    window.addEventListener('scroll', fn, { passive: true });
+    return () => window.removeEventListener('scroll', fn);
+  }, []);
+
+  const [statsRef, statsVisible]       = useScrollReveal(0.1);
+  const [actionsRef, actionsVisible]   = useScrollReveal(0.1);
+  const [routesRef, routesVisible]     = useScrollReveal(0.1);
+  const [scheduleRef, scheduleVisible] = useScrollReveal(0.1);
+
+  const greeting = () => {
     const h = new Date().getHours();
-    setGreeting(h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
-    users.dashboard().then(res => setDashData(res.dashboard)).catch(() => {});
-    passes.active().then(res => setActivePass(res.pass)).catch(() => {});
-    cardApi.getCard().then(res => setCardData(res.card)).catch(() => {});
-  }, []);
-
-  // Auto-slide
-  useEffect(() => {
-    timerRef.current = setInterval(() => setSlide(s => (s + 1) % SLIDES.length), 5000);
-    return () => clearInterval(timerRef.current);
-  }, []);
-
-  const goSlide = (i) => {
-    setSlide(i);
-    clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => setSlide(s => (s + 1) % SLIDES.length), 5000);
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
   };
 
-  // cardData is now fetched from backend in useEffect above
-
   return (
-    <div className="fade-up">
-      {/* ━━━ HERO CAROUSEL ━━━ */}
-      <div style={{ borderRadius: 'var(--radius-xl)', overflow: 'hidden', marginBottom: '1.5rem', position: 'relative', height: 220 }}>
-        {SLIDES.map((s, i) => (
-          <div key={i} style={{
-            position: 'absolute', inset: 0, background: s.gradient, padding: '2rem 2.5rem',
-            display: 'flex', flexDirection: 'column', justifyContent: 'center', color: '#fff',
-            opacity: i === slide ? 1 : 0, transform: i === slide ? 'translateX(0)' : i < slide ? 'translateX(-40px)' : 'translateX(40px)',
-            transition: 'opacity .6s ease, transform .6s ease', pointerEvents: i === slide ? 'auto' : 'none',
-          }}>
-            {/* Decorative circles */}
-            <div style={{ position: 'absolute', right: -30, top: -30, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,.06)' }} />
-            <div style={{ position: 'absolute', right: 80, bottom: -50, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,.04)' }} />
+    <div className="portal-root">
 
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.08em', opacity: .7, marginBottom: '.4rem' }}>{s.tag}</div>
-              <div style={{ fontSize: 'clamp(1.3rem,2.5vw,1.8rem)', fontWeight: 800, marginBottom: '.35rem', letterSpacing: '-.02em' }}>
-                {i === 0 ? `${greeting}, ${name}!` : s.title}
-              </div>
-              <div style={{ fontSize: '.88rem', opacity: .8, maxWidth: 520, lineHeight: 1.5, marginBottom: '.85rem' }}>{s.desc}</div>
-              <div style={{ display: 'flex', gap: '.5rem' }}>
-                <button onClick={() => navigate(s.cta.to)} style={{ background: 'rgba(255,255,255,.18)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', padding: '.45rem .9rem', borderRadius: 'var(--radius-sm)', fontWeight: 600, fontSize: '.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '.3rem', backdropFilter: 'blur(10px)' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>{s.cta.icon}</span> {s.cta.label}
-                </button>
-                <button onClick={() => navigate(s.cta2.to)} style={{ background: '#fff', color: '#1e293b', border: 'none', padding: '.45rem .9rem', borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: '.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '.3rem' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>{s.cta2.icon}</span> {s.cta2.label}
-                </button>
+      {/* ══════════ HERO ══════════ */}
+      <section className="portal-hero">
+        <div className="portal-hero-img-wrap">
+          <img ref={heroImgRef} src="/assets/campus.jpg" alt="VIT Vellore campus" className="portal-hero-img" />
+          <div className="portal-hero-overlay" />
+        </div>
+
+        <div className="portal-hero-content">
+          <div className="portal-hero-tag fade-up">
+            <span className="live-dot" style={{ width: 7, height: 7 }} />
+            <span>System Live · {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+          </div>
+          <h1 className="portal-hero-title fade-up" style={{ animationDelay: '.1s' }}>
+            {greeting()},<br />
+            <span className="portal-hero-name">{userName.split(' ')[0]}</span> 👋
+          </h1>
+          <p className="portal-hero-sub fade-up" style={{ animationDelay: '.2s' }}>
+            VIT Vellore Campus Transit System — 4 shuttles active, all routes on schedule
+          </p>
+          <div className="portal-hero-btns fade-up" style={{ animationDelay: '.3s' }}>
+            <button className="hero-btn-primary" onClick={() => navigate('/portal/live-map')}>
+              <span className="material-symbols-outlined">location_on</span>
+              Track Live
+            </button>
+            <button className="hero-btn-ghost" onClick={() => navigate('/portal/schedule')}>
+              <span className="material-symbols-outlined">calendar_month</span>
+              View Schedule
+            </button>
+          </div>
+        </div>
+
+        <div className="portal-hero-hud fade-up" style={{ animationDelay: '.45s' }}>
+          {[
+            { label: 'Next Bus',    value: '06 min', icon: 'schedule',           color: 'var(--primary)' },
+            { label: 'Route Alpha', value: 'On Time', icon: 'check_circle',      color: 'var(--green)' },
+            { label: 'Pass Valid',  value: '22 days', icon: 'confirmation_number', color: 'var(--accent)' },
+          ].map((h) => (
+            <div key={h.label} className="hero-hud-card">
+              <span className="material-symbols-outlined" style={{ fontSize: '1.15rem', color: h.color }}>{h.icon}</span>
+              <div>
+                <div className="hero-hud-val">{h.value}</div>
+                <div className="hero-hud-label">{h.label}</div>
               </div>
             </div>
-          </div>
-        ))}
-
-        {/* Dots */}
-        <div style={{ position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '.4rem', zIndex: 5 }}>
-          {SLIDES.map((_, i) => (
-            <button key={i} onClick={() => goSlide(i)} style={{
-              width: i === slide ? 24 : 8, height: 8, borderRadius: 4,
-              background: i === slide ? '#fff' : 'rgba(255,255,255,.35)',
-              border: 'none', cursor: 'pointer', transition: 'all .3s',
-            }} />
           ))}
         </div>
 
-        {/* Arrows */}
-        <button onClick={() => goSlide((slide - 1 + SLIDES.length) % SLIDES.length)} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,.3)', color: '#fff', border: 'none', width: 32, height: 32, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, backdropFilter: 'blur(4px)' }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>chevron_left</span>
-        </button>
-        <button onClick={() => goSlide((slide + 1) % SLIDES.length)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,.3)', color: '#fff', border: 'none', width: 32, height: 32, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, backdropFilter: 'blur(4px)' }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>chevron_right</span>
-        </button>
-      </div>
-
-      {/* ━━━ ACTIVE PASS + CARD BANNER ━━━ */}
-      <div className="grid-2" style={{ marginBottom: '1.25rem' }}>
-        {/* Active Pass */}
-        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '.8rem', padding: '1rem 1.15rem', background: activePass ? 'var(--green-bg)' : 'var(--surface-2)', borderColor: activePass ? 'var(--green)' : 'var(--border)' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-md)', background: activePass ? 'var(--green)' : 'var(--surface-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span className="material-symbols-outlined" style={{ color: activePass ? '#fff' : 'var(--text-4)', fontSize: '1.2rem' }}>{activePass ? 'verified' : 'credit_card_off'}</span>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: '.88rem', color: activePass ? 'var(--green)' : 'var(--text-3)' }}>
-              {activePass ? `${activePass.type?.toUpperCase()} PASS — Active` : 'No Active Pass'}
-            </div>
-            <div style={{ fontSize: '.72rem', color: 'var(--text-3)' }}>
-              {activePass ? `Valid until ${new Date(activePass.endDate).toLocaleDateString('en-IN')}` : 'Buy a pass to start riding'}
-            </div>
-          </div>
-          <button className="btn btn-secondary" style={{ fontSize: '.74rem' }} onClick={() => navigate(activePass ? '/settings' : '/buy-pass')}>
-            {activePass ? 'View QR' : 'Buy Pass'}
-          </button>
+        <div className="portal-scroll-cue">
+          <span className="material-symbols-outlined">keyboard_arrow_down</span>
         </div>
+      </section>
 
-        {/* Shuttle Card */}
-        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '.8rem', padding: '1rem 1.15rem' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-md)', background: 'linear-gradient(135deg, #1e293b, #334155)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span className="material-symbols-outlined" style={{ color: '#4ade80', fontSize: '1.2rem' }}>credit_card</span>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: '.88rem' }}>Shuttle Card</div>
-            <div style={{ fontSize: '.72rem', color: 'var(--text-3)' }}>
-              {cardData ? `Balance: ₹${cardData.balance?.toLocaleString('en-IN')} • ${cardData.number?.slice(-4)}` : 'View your transit card'}
-            </div>
-          </div>
-          <button className="btn btn-secondary" style={{ fontSize: '.74rem' }} onClick={() => navigate('/settings')}>
-            <span className="material-symbols-outlined" style={{ fontSize: '.85rem' }}>credit_card</span> Card
-          </button>
-        </div>
-      </div>
-
-      {/* ━━━ STATS ━━━ */}
-      <div className="stats-grid" style={{ marginBottom: '2rem' }}>
-        <div className="stat-card"><div className="stat-icon blue"><span className="material-symbols-outlined">directions_bus</span></div><div className="stat-value">4</div><div className="stat-label">Active Shuttles</div><span className="stat-trend up">↑ 3 routes</span></div>
-        <div className="stat-card"><div className="stat-icon green"><span className="material-symbols-outlined">route</span></div><div className="stat-value">3</div><div className="stat-label">Campus Routes</div><span className="stat-trend up">Alpha, Beta, Charlie</span></div>
-        <div className="stat-card"><div className="stat-icon orange"><span className="material-symbols-outlined">confirmation_number</span></div><div className="stat-value">{dashData?.totalRides || 0}</div><div className="stat-label">My Rides</div><span className="stat-trend up">Lifetime</span></div>
-        <div className="stat-card"><div className="stat-icon purple"><span className="material-symbols-outlined">avg_pace</span></div><div className="stat-value">94%</div><div className="stat-label">On-Time Rate</div><span className="stat-trend up">↑ 2%</span></div>
-      </div>
-
-      {/* ━━━ HOW IT WORKS ━━━ */}
-      <div style={{ marginBottom: '2rem' }}>
-        <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-          <div className="page-tag" style={{ display: 'inline-flex' }}><span className="material-symbols-outlined">school</span> How It Works</div>
-          <h2 style={{ fontWeight: 800, fontSize: '1.4rem', marginTop: '.35rem', letterSpacing: '-.02em' }}>4 Simple Steps to Start Riding</h2>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '1rem' }}>
-          {STEPS.map((s, i) => (
-            <div key={s.num} className="card" style={{ textAlign: 'center', padding: '1.25rem 1rem', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', top: 6, right: 10, fontSize: '2.5rem', fontWeight: 900, color: 'var(--border)', lineHeight: 1 }}>{s.num}</div>
-              <div className={`stat-icon ${['blue', 'green', 'orange', 'purple'][i]}`} style={{ margin: '0 auto .65rem' }}>
-                <span className="material-symbols-outlined">{s.icon}</span>
-              </div>
-              <div style={{ fontWeight: 800, fontSize: '.9rem', marginBottom: '.2rem' }}>{s.title}</div>
-              <div style={{ fontSize: '.74rem', color: 'var(--text-3)', lineHeight: 1.5 }}>{s.desc}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ━━━ CAMPUS ROUTES ━━━ */}
-      <div style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <div><div className="page-tag"><span className="material-symbols-outlined">route</span> Routes</div><h2 style={{ fontWeight: 800, fontSize: '1.15rem', marginTop: '.3rem' }}>Campus Routes</h2></div>
-          <button className="btn btn-secondary" onClick={() => navigate('/schedule')}><span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>event_note</span> Schedule</button>
-        </div>
-        <div className="grid-3">
-          {ROUTES_INFO.map(r => (
-            <div key={r.name} className="card" style={{ borderLeft: `4px solid ${r.color}`, padding: '1.15rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.65rem' }}>
-                <div style={{ fontWeight: 800, fontSize: '.92rem', color: r.color }}>{r.name}</div>
-                <div style={{ display: 'flex', gap: '.25rem' }}>
-                  <span className="badge badge-green" style={{ fontSize: '.58rem' }}>{r.buses} bus</span>
-                  <span className="badge badge-blue" style={{ fontSize: '.58rem' }}>{r.freq}</span>
+      {/* ══════════ STATS ══════════ */}
+      <section ref={statsRef} className="portal-section" style={{ paddingTop: '3rem' }}>
+        <div className={`portal-stats-grid stagger ${statsVisible ? 'reveal-done' : 'reveal-hidden'}`}>
+          {STATS.map((s) => (
+            <div key={s.label} className="stat-card fade-up">
+              <div className="stat-card-top">
+                <div className="stat-icon-wrap" style={{ background: `color-mix(in srgb, ${s.color} 12%, transparent)`, boxShadow: `0 0 20px ${s.glow}` }}>
+                  <span className="material-symbols-outlined" style={{ color: s.color }}>{s.icon}</span>
                 </div>
+                <span className="stat-card-arrow material-symbols-outlined">arrow_outward</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '.3rem' }}>
-                {r.stops.map((s, i) => (
-                  <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: '.78rem' }}>
-                    <div style={{ width: 20, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: r.color, border: '2px solid #fff', boxShadow: `0 0 0 1px ${r.color}` }} />
-                      {i < r.stops.length - 1 && <div style={{ width: 2, height: 14, background: `${r.color}40` }} />}
-                    </div>
-                    <span style={{ fontWeight: 600, color: 'var(--text-2)' }}>{s}</span>
+              <div className="stat-val" style={{ color: s.color }}>
+                <CountUp to={s.value} suffix={s.suffix} />
+              </div>
+              <div className="stat-label">{s.label}</div>
+              <div className="stat-desc">{s.desc}</div>
+              <div className="stat-bar">
+                <div className="stat-bar-fill" style={{ background: s.color, width: `${Math.min((s.value / (s.suffix === '%' ? 100 : s.value * 1.3)) * 100, 100)}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ══════════ QUICK ACTIONS ══════════ */}
+      <section ref={actionsRef} className="portal-section">
+        <div className={`section-header ${actionsVisible ? 'reveal-done' : 'reveal-hidden'}`}>
+          <div>
+            <div className="page-tag"><span className="material-symbols-outlined">bolt</span> Quick Access</div>
+            <h2 className="section-title">What would you like to do?</h2>
+          </div>
+        </div>
+        <div className={`quick-actions-grid stagger ${actionsVisible ? 'reveal-done' : 'reveal-hidden'}`}>
+          {QUICK_ACTIONS.map((a) => (
+            <button key={a.label} className="qa-card fade-up" onClick={() => navigate(a.to)}>
+              <div className="qa-icon" style={{ background: a.bg, color: a.color }}>
+                <span className="material-symbols-outlined">{a.icon}</span>
+              </div>
+              <span className="qa-label">{a.label}</span>
+              <span className="material-symbols-outlined qa-arrow">arrow_forward</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ══════════ ROUTES ══════════ */}
+      <section ref={routesRef} className="portal-section">
+        <div className={`section-header ${routesVisible ? 'reveal-done' : 'reveal-hidden'}`}>
+          <div>
+            <div className="page-tag"><span className="material-symbols-outlined">route</span> Active Routes</div>
+            <h2 className="section-title">Campus Route Network</h2>
+          </div>
+          <button className="section-link" onClick={() => navigate('/portal/live-map')}>
+            View Live Map <span className="material-symbols-outlined">arrow_forward</span>
+          </button>
+        </div>
+        <div className={`routes-grid stagger ${routesVisible ? 'reveal-done' : 'reveal-hidden'}`}>
+          {Object.entries(ROUTE_COLOURS).map(([name, route], idx) => (
+            <div
+              key={name}
+              className="route-card fade-up"
+              onClick={() => navigate('/portal/live-map')}
+              style={{ '--route-color': route.color, '--route-bg': route.bg, animationDelay: `${idx * .1}s` }}
+            >
+              <div className="route-card-glow" />
+              <div className="route-card-header">
+                <div className="route-badge" style={{ background: route.bg, color: route.color }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '.9rem' }}>directions_bus</span>
+                  Route {name}
+                </div>
+                <span className="live-badge" style={{ fontSize: '.6rem' }}>
+                  <span className="live-dot" style={{ width: 6, height: 6 }} />
+                  LIVE
+                </span>
+              </div>
+              <div className="stop-chain">
+                {route.stops.map((stop, i) => (
+                  <div key={stop} className="stop-chain-item">
+                    <div className="stop-chain-dot" style={{
+                      background: i === 0 || i === route.stops.length - 1 ? route.color : 'transparent',
+                      border: `2px solid ${route.color}`,
+                    }} />
+                    {i < route.stops.length - 1 && <div className="stop-chain-line" style={{ background: `${route.color}40` }} />}
+                    <span className="stop-chain-label" style={{ color: (i === 0 || i === route.stops.length - 1) ? 'var(--text)' : 'var(--text-3)', fontWeight: (i === 0 || i === route.stops.length - 1) ? 700 : 400 }}>
+                      {stop}
+                    </span>
                   </div>
                 ))}
               </div>
-              <button className="btn btn-secondary" style={{ marginTop: '.75rem', width: '100%', justifyContent: 'center', fontSize: '.76rem' }} onClick={() => navigate('/live-map')}>
-                <span className="material-symbols-outlined" style={{ fontSize: '.9rem' }}>my_location</span> Track
-              </button>
+              <div className="route-card-footer">
+                <span style={{ fontSize: '.72rem', color: 'var(--text-4)' }}>
+                  VIT-00{idx + 1} · {['18', '16', '15'][idx]} km/h
+                </span>
+                <span className="material-symbols-outlined" style={{ fontSize: '1rem', color: route.color }}>chevron_right</span>
+              </div>
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* ━━━ FEATURES ━━━ */}
-      <div style={{ marginBottom: '2rem' }}>
-        <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-          <div className="page-tag" style={{ display: 'inline-flex' }}><span className="material-symbols-outlined">auto_awesome</span> Features</div>
-          <h2 style={{ fontWeight: 800, fontSize: '1.3rem', marginTop: '.35rem' }}>Everything You Need</h2>
+      {/* ══════════ SCHEDULE ══════════ */}
+      <section ref={scheduleRef} className="portal-section" style={{ paddingBottom: '3rem' }}>
+        <div className={`section-header ${scheduleVisible ? 'reveal-done' : 'reveal-hidden'}`}>
+          <div>
+            <div className="page-tag"><span className="material-symbols-outlined">schedule</span> Today</div>
+            <h2 className="section-title">Upcoming Departures</h2>
+          </div>
+          <button className="section-link" onClick={() => navigate('/portal/schedule')}>
+            Full Schedule <span className="material-symbols-outlined">arrow_forward</span>
+          </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1rem' }}>
-          {FEATURES.map(f => (
-            <div key={f.title} className="card" style={{ display: 'flex', gap: '.75rem', alignItems: 'flex-start', padding: '1.15rem' }}>
-              <div className={`stat-icon ${f.color}`} style={{ flexShrink: 0 }}><span className="material-symbols-outlined">{f.icon}</span></div>
-              <div><div style={{ fontWeight: 800, fontSize: '.9rem', marginBottom: '.15rem' }}>{f.title}</div><div style={{ fontSize: '.76rem', color: 'var(--text-3)', lineHeight: 1.5 }}>{f.desc}</div></div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ━━━ QUICK ACTIONS + SIDEBAR ━━━ */}
-      <div className="grid-main-side" style={{ marginBottom: '2rem' }}>
-        <div className="card">
-          <div className="card-title"><span className="material-symbols-outlined">bolt</span>Quick Actions</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '.75rem' }}>
-            {[
-              { icon: 'map', label: 'Live Map', desc: 'Track buses', to: '/live-map', color: 'blue' },
-              { icon: 'shopping_cart', label: 'Buy Pass', desc: 'Get QR pass', to: '/buy-pass', color: 'purple' },
-              { icon: 'credit_card', label: 'My Card', desc: 'View & top up', to: '/settings', color: 'green' },
-              { icon: 'event_note', label: 'Schedule', desc: 'View timetables', to: '/schedule', color: 'orange' },
-              { icon: 'qr_code_2', label: 'My QR', desc: 'Boarding pass', to: '/settings', color: 'blue' },
-              { icon: 'chat', label: 'Support', desc: 'Chat with team', to: '/chat', color: 'green' },
-            ].map(a => (
-              <div key={a.label} onClick={() => navigate(a.to)} style={{ padding: '.8rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', cursor: 'pointer', transition: 'all .2s', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', gap: '.6rem' }} onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.transform = 'translateY(-2px)'; }} onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'none'; }}>
-                <div className={`stat-icon ${a.color}`}><span className="material-symbols-outlined">{a.icon}</span></div>
-                <div><div style={{ fontWeight: 700, fontSize: '.82rem' }}>{a.label}</div><div style={{ fontSize: '.68rem', color: 'var(--text-3)' }}>{a.desc}</div></div>
+        <div className={`schedule-list ${scheduleVisible ? 'reveal-done' : 'reveal-hidden'}`}>
+          {SCHEDULE_PREVIEW.map((item, i) => {
+            const rc = ROUTE_COLOURS[item.route];
+            return (
+              <div key={i} className="schedule-row fade-up" style={{ animationDelay: `${i * 0.07}s` }}>
+                <div className="schedule-route-dot" style={{ background: rc.color, boxShadow: `0 0 10px ${rc.color}60` }} />
+                <div className="schedule-route-tag" style={{ color: rc.color, background: rc.bg }}>{item.route}</div>
+                <div className="schedule-from-to">
+                  <span>{item.from}</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: '.85rem', color: 'var(--text-4)' }}>east</span>
+                  <span>{item.to}</span>
+                </div>
+                <div className="schedule-time">{item.time}</div>
+                <div className={`schedule-status ${item.status === 'On Time' ? 'on-time' : 'delayed'}`}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '.85rem' }}>
+                    {item.status === 'On Time' ? 'check_circle' : 'warning'}
+                  </span>
+                  {item.status}
+                </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div className="card">
-            <div className="card-title"><span className="material-symbols-outlined">campaign</span>Announcements</div>
-            {[
-              { title: 'All Systems Go', desc: 'Shuttles running normally', type: 'ok', icon: 'check_circle' },
-              { title: 'Holiday Schedule', desc: 'Modified timings Apr 12', type: 'warn', icon: 'event' },
-              { title: 'New Route Charlie', desc: 'Gate 2 → Gym → Admin', type: 'info', icon: 'add_road' },
-              { title: 'AC on Route Alpha', desc: 'Both buses now AC ❄️', type: 'ok', icon: 'ac_unit' },
-            ].map((a, i) => (
-              <div key={i} className="alert-card" style={{ padding: '.55rem .65rem', marginBottom: '.3rem' }}>
-                <div className={`alert-icon ${a.type}`}><span className="material-symbols-outlined">{a.icon}</span></div>
-                <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: '.78rem' }}>{a.title}</div><div style={{ fontSize: '.66rem', color: 'var(--text-3)' }}>{a.desc}</div></div>
-              </div>
-            ))}
-          </div>
-
-          <div className="card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '.68rem', color: 'var(--text-4)', letterSpacing: '.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '.4rem' }}>Operating Hours</div>
-            <div style={{ fontWeight: 800, fontSize: '1.4rem', color: 'var(--primary)' }}>6:00 AM — 10:00 PM</div>
-            <div style={{ fontSize: '.76rem', color: 'var(--text-3)', marginTop: '.2rem' }}>Monday to Saturday</div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '.65rem' }}>
-              <div><div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--green)' }}>15 min</div><div style={{ fontSize: '.62rem', color: 'var(--text-4)' }}>Frequency</div></div>
-              <div style={{ width: 1, background: 'var(--border)' }} />
-              <div><div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--orange)' }}>10</div><div style={{ fontSize: '.62rem', color: 'var(--text-4)' }}>Stops</div></div>
-            </div>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }

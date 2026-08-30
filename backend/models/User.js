@@ -16,11 +16,10 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    match: [/^[^\s@]+@(vitstudent\.ac\.in|vit\.ac\.in)$/, 'Only @vitstudent.ac.in or @vit.ac.in emails are allowed']
+    match: [/^[^\s@]+@(vitstudent\.ac\.in|vit\.ac\.in)$/, 'Only @vit.ac.in or @vitstudent.ac.in emails are allowed']
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
     minlength: [6, 'Password must be at least 6 characters'],
     select: false
   },
@@ -45,6 +44,8 @@ const userSchema = new mongoose.Schema({
   resetPasswordToken: String,
   resetPasswordExpire: Date,
   lastLogin: { type: Date },
+  otp: { type: String },
+  otpExpire: { type: Date },
   totalRides: { type: Number, default: 0 },
   // Shuttle Card
   cardNumber: { type: String },

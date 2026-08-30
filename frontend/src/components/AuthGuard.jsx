@@ -6,7 +6,7 @@ import { isLoggedIn } from '../utils/auth';
  */
 export default function AuthGuard({ children }) {
   if (!isLoggedIn()) {
-    return <Navigate to="/signin" replace />;
+    return <Navigate to="/" replace />;
   }
   return children;
 }

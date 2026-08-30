@@ -15,6 +15,7 @@ const scanRoutes = require('./routes/scans');
 const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/users');
 const cardRoutes = require('./routes/card');
+const publicRoutes = require('./routes/public');
 
 const app = express();
 
@@ -69,8 +70,8 @@ mongoose.connect(process.env.MONGODB_URI)
     const User = require('./models/User');
     const admin = await User.findOne({ email: 'admin@vit.ac.in' });
     if (!admin) {
-      await User.create({ name: 'Admin', email: 'admin@vit.ac.in', password: 'Admin@123', role: 'admin', regNo: 'ADMIN001' });
-      console.log('👤 Admin user created (admin@vit.ac.in / Admin@123)');
+      await User.create({ name: 'Admin', email: 'admin@vit.ac.in', password: 'Admin@1234', role: 'admin', regNo: 'ADMIN001', isVerified: true });
+      console.log('👤 Admin user created (admin@vit.ac.in / Admin@1234)');
     }
   })
   .catch(err => console.error('❌ MongoDB connection error:', err.message));
@@ -85,6 +86,7 @@ app.use('/api/scans', scanRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/card', cardRoutes);
+app.use('/api/public', publicRoutes);
 
 // ── Health Check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

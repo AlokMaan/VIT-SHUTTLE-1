@@ -3,6 +3,10 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const User = require('./models/User');
 const Shuttle = require('./models/Shuttle');
+const Route = require('./models/Route');
+const Stop = require('./models/Stop');
+const Driver = require('./models/Driver');
+const AdminSettings = require('./models/AdminSettings');
 
 const seed = async () => {
   try {
@@ -12,6 +16,10 @@ const seed = async () => {
     // Clear existing
     await User.deleteMany({});
     await Shuttle.deleteMany({});
+    await Route.deleteMany({});
+    await Stop.deleteMany({});
+    await Driver.deleteMany({});
+    await AdminSettings.deleteMany({});
     console.log('🗑️  Cleared existing data');
 
     // Create admin user
@@ -126,8 +134,50 @@ const seed = async () => {
       }
     ];
 
-    await Shuttle.insertMany(shuttles);
+    const insertedShuttles = await Shuttle.insertMany(shuttles);
     console.log(`🚌 ${shuttles.length} shuttles seeded`);
+
+    // ── Seed New Models ──────────────────────────────────────────────────────
+    const routeAlpha = await Route.create({
+      code: 'ALPHA', name: 'Route Alpha', color: '#1d72c8',
+      path: [{ lat: 12.9697, lng: 79.1553 }, { lat: 12.9716, lng: 79.1589 }, { lat: 12.9730, lng: 79.1610 }]
+    });
+    const routeBeta = await Route.create({
+      code: 'BETA', name: 'Route Beta', color: '#1a9a4e',
+      path: [{ lat: 12.9680, lng: 79.1540 }, { lat: 12.9716, lng: 79.1589 }, { lat: 12.9745, lng: 79.1620 }]
+    });
+    const routeCharlie = await Route.create({
+      code: 'CHARLIE', name: 'Route Charlie', color: '#6d4fd6',
+      path: [{ lat: 12.9725, lng: 79.1555 }, { lat: 12.9710, lng: 79.1575 }, { lat: 12.9695, lng: 79.1600 }]
+    });
+    console.log(`🛣️  3 Routes seeded`);
+
+    const stopsData = [
+      { name: 'Main Gate', code: 'MG', location: { lat: 12.9697, lng: 79.1553 }, routes: [routeAlpha._id] },
+      { name: 'SJT Block', code: 'SJT', location: { lat: 12.9716, lng: 79.1589 }, routes: [routeAlpha._id, routeBeta._id] },
+      { name: 'TT Complex', code: 'TT', location: { lat: 12.9730, lng: 79.1610 }, routes: [routeAlpha._id] },
+      { name: 'Men\'s Hostel', code: 'MH', location: { lat: 12.9680, lng: 79.1540 }, routes: [routeBeta._id] },
+      { name: 'Ladies Hostel', code: 'LH', location: { lat: 12.9745, lng: 79.1620 }, routes: [routeBeta._id] },
+      { name: 'PRP Block', code: 'PRP', location: { lat: 12.9725, lng: 79.1555 }, routes: [routeCharlie._id] },
+      { name: 'Foodys', code: 'FOOD', location: { lat: 12.9710, lng: 79.1575 }, routes: [routeCharlie._id] },
+      { name: 'Annex', code: 'ANNX', location: { lat: 12.9695, lng: 79.1600 }, routes: [routeCharlie._id] }
+    ];
+    await Stop.insertMany(stopsData);
+    console.log(`🚏 Stops seeded`);
+
+    await Driver.create([
+      { name: 'Ravi Kumar', phone: '9876543210', licenseNo: 'DL12345', assignedShuttle: insertedShuttles[0]._id },
+      { name: 'Suresh S', phone: '9876543211', licenseNo: 'DL67890', assignedShuttle: insertedShuttles[1]._id },
+      { name: 'Muthu R', phone: '9876543212', licenseNo: 'DL11223', assignedShuttle: insertedShuttles[2]._id }
+    ]);
+    console.log(`👨‍✈️ 3 Drivers seeded`);
+
+    await AdminSettings.create([
+      { key: 'operating_hours', value: { start: '06:00', end: '22:00' }, category: 'general', updatedBy: admin._id },
+      { key: 'maintenance_mode', value: false, category: 'general', updatedBy: admin._id },
+      { key: 'enable_3d_view', value: true, category: 'features', updatedBy: admin._id }
+    ]);
+    console.log(`⚙️  Admin Settings seeded`);
 
     console.log('\n✅ Database seeded successfully!\n');
     console.log('Login credentials:');

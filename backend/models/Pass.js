@@ -45,9 +45,9 @@ const passSchema = new mongoose.Schema({
 });
 
 // Auto-update status if expired
-passSchema.pre('find', function() {
-  this.where({ endDate: { $gte: new Date() } }).or([{ status: 'active' }]);
-});
+// passSchema.pre('find', function() {
+//   this.where({ endDate: { $gte: new Date() } }).or([{ status: 'active' }]);
+// });
 
 passSchema.virtual('isActive').get(function() {
   return this.status === 'active' && this.endDate >= new Date();

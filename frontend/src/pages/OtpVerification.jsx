@@ -19,10 +19,18 @@ export default function OtpVerification() {
   const navigate = useNavigate();
   const location = useLocation();
   const email = location.state?.email || localStorage.getItem('verifyEmail');
+  const receivedOtp = location.state?.otp;
 
   useEffect(() => {
     if (!email) { navigate('/'); return; }
-    inputRefs[0].current?.focus();
+    // Auto-fill OTP if received from the API
+    if (receivedOtp) {
+      const digits = receivedOtp.toString().split('');
+      setOtp(digits);
+      setSuccessMsg('Code auto-filled! Tap Verify.');
+    } else {
+      inputRefs[0].current?.focus();
+    }
     const interval = setInterval(() => {
       setResendTimer((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
@@ -109,11 +117,17 @@ export default function OtpVerification() {
     setError('');
     setSuccessMsg('');
     try {
-      await auth.sendOtp(email);
+      const res = await auth.sendOtp(email);
       setResendTimer(30);
-      setSuccessMsg('New code sent!');
-      setOtp(['', '', '', '']);
-      inputRefs[0].current?.focus();
+      if (res.otp) {
+        const digits = res.otp.toString().split('');
+        setOtp(digits);
+        setSuccessMsg('New code auto-filled!');
+      } else {
+        setSuccessMsg('New code sent!');
+        setOtp(['', '', '', '']);
+        inputRefs[0].current?.focus();
+      }
     } catch (err) {
       setError(err.message || 'Failed to resend');
     } finally {

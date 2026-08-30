@@ -224,17 +224,17 @@ router.post('/send-otp', async (req, res) => {
     // Always log OTP to console
     console.log(`\n📧 OTP for ${lowerEmail}: ${otp}\n`);
 
-    // Respond IMMEDIATELY — don't wait for email
-    res.json({ success: true, message: 'Verification code sent to your email.' });
+    // Respond IMMEDIATELY with OTP included
+    res.json({ success: true, message: 'Verification code sent to your email.', otp });
 
-    // Fire-and-forget: send email in the background AFTER responding
+    // Fire-and-forget: try sending email in the background
     sendEmail({
       email: user.email,
       subject: 'VIT Shuttle - Verification Code',
       otp
     })
     .then(() => console.log(`✅ Email sent successfully to ${lowerEmail}`))
-    .catch((emailErr) => console.error('⚠️  Email send failed (OTP still valid, check console):', emailErr.message));
+    .catch((emailErr) => console.error('⚠️  Email send failed:', emailErr.message));
 
   } catch (err) {
     console.error('Send OTP error:', err);

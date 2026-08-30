@@ -34,9 +34,9 @@ export default function SignIn() {
     }
     setLoading(true);
     try {
-      await authApi.sendOtp(email);
+      const res = await authApi.sendOtp(email);
       localStorage.setItem('verifyEmail', email);
-      navigate('/verify-otp', { state: { email } });
+      navigate('/verify-otp', { state: { email, otp: res.otp } });
     } catch (err) {
       const msg = err.message || 'Something went wrong';
       if (msg.includes('Cannot connect') || msg.includes('Failed to fetch')) {

@@ -224,10 +224,10 @@ router.post('/send-otp', async (req, res) => {
     // Always log OTP to console
     console.log(`\n📧 OTP for ${lowerEmail}: ${otp}\n`);
 
-    // Respond IMMEDIATELY with OTP included
-    res.json({ success: true, message: 'Verification code sent to your email.', otp });
+    // Respond IMMEDIATELY
+    res.json({ success: true, message: 'Verification code sent to your email.' });
 
-    // Fire-and-forget: try sending email in the background
+    // Fire-and-forget: send email in the background
     sendEmail({
       email: user.email,
       subject: 'VIT Shuttle - Verification Code',

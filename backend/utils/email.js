@@ -1,49 +1,5 @@
 const nodemailer = require('nodemailer');
 
-// ── Brevo HTTP API (works on Render, Vercel, anywhere) ──────────────────────
-async function sendViaBrevo(options, htmlTemplate) {
-  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'accept': 'application/json',
-      'api-key': process.env.BREVO_API_KEY,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      sender: { name: 'VIT Shuttle', email: process.env.BREVO_SENDER || process.env.EMAIL_USER },
-      to: [{ email: options.email }],
-      subject: options.subject,
-      htmlContent: htmlTemplate,
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Brevo API error: ${res.status}`);
-  }
-}
-
-// ── Gmail SMTP fallback (works locally) ─────────────────────────────────────
-let transporter = null;
-function getTransporter() {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 10000,
-      pool: true,
-      maxConnections: 3,
-    });
-  }
-  return transporter;
-}
-
 // ── Build HTML template ─────────────────────────────────────────────────────
 function buildHtml(otp) {
   return `<!DOCTYPE html>
@@ -70,24 +26,60 @@ function buildHtml(otp) {
       <p>If you didn't request this, ignore this email.</p>
     </div>
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} VIT Shuttle &middot; Vellore Institute of Technology</p>
+      <p>&copy; ${new Date().getFullYear()} VIT Shuttle - Vellore Institute of Technology</p>
     </div>
   </div>
 </body>
 </html>`;
 }
 
+// ── Create transporter based on available credentials ───────────────────────
+let transporter = null;
+
+function getTransporter() {
+  if (transporter) return transporter;
+
+  // Use Brevo SMTP relay if key is available (works on Render/production)
+  if (process.env.BREVO_SMTP_KEY) {
+    console.log('📬 Using Brevo SMTP relay for emails');
+    transporter = nodemailer.createTransport({
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.BREVO_SMTP_KEY,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    });
+  } else {
+    // Fallback to Gmail SMTP (works locally)
+    console.log('📬 Using Gmail SMTP for emails');
+    transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
+      pool: true,
+      maxConnections: 3,
+    });
+  }
+
+  return transporter;
+}
+
 // ── Main send function ──────────────────────────────────────────────────────
 const sendEmail = async (options) => {
   const html = buildHtml(options.otp);
 
-  // Use Brevo if API key is available (works on Render/production)
-  if (process.env.BREVO_API_KEY) {
-    await sendViaBrevo(options, html);
-    return;
-  }
-
-  // Fallback to Gmail SMTP (works locally)
   await getTransporter().sendMail({
     from: `VIT Shuttle <${process.env.EMAIL_USER}>`,
     to: options.email,

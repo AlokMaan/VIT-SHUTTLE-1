@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: vit-shuttle-backend
+    env: node
+    region: singapore
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        fromDatabase: false
+      - key: JWT_SECRET
+        fromDatabase: false
+      - key: EMAIL_USER
+        fromDatabase: false
+      - key: EMAIL_PASS
+        fromDatabase: false

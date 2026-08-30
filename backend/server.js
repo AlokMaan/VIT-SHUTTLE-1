@@ -122,7 +122,7 @@ app.use((err, req, res, next) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5002;
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+if (!process.env.VERCEL) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚌 VIT Shuttle Backend API`);
     console.log(`📡 Running on: http://0.0.0.0:${PORT}`);

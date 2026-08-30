@@ -96,7 +96,7 @@ app.get('/api/health', (req, res) => {
     version: '2.0.0',
     timestamp: new Date().toISOString(),
     db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    email: process.env.BREVO_SMTP_KEY ? 'brevo' : (process.env.EMAIL_PASS ? 'gmail' : 'none'),
+    email: process.env.BREVO_API_KEY ? 'brevo-http' : (process.env.EMAIL_PASS ? 'gmail-smtp' : 'none'),
   });
 });
 

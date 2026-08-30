@@ -4,7 +4,7 @@
  */
 const hostname = window.location.hostname;
 const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168') || hostname.startsWith('172.') || hostname.startsWith('10.');
-const BASE = isLocal ? `http://${hostname}:5002/api` : 'https://vit-shuttle-1.onrender.com/api';
+const BASE = import.meta.env.VITE_API_URL || (isLocal ? `http://${hostname}:5002/api` : 'https://vit-shuttle-1.onrender.com/api');
 
 function getToken() {
   try {

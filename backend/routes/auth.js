@@ -221,24 +221,21 @@ router.post('/send-otp', async (req, res) => {
     user.otpExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
     await user.save({ validateBeforeSave: false });
 
-    // Always log OTP to console for development/debugging
+    // Always log OTP to console
     console.log(`\n📧 OTP for ${lowerEmail}: ${otp}\n`);
 
-    // Try sending email, but don't fail if SMTP is down
-    try {
-      await sendEmail({
-        email: user.email,
-        subject: 'VIT Shuttle - Verification Code',
-        otp
-      });
-      console.log(`✅ Email sent successfully to ${lowerEmail}`);
-    } catch (emailErr) {
-      console.error('⚠️  Email send failed (OTP still valid, check console above):', emailErr.message);
-      // Don't throw - OTP is still saved and can be verified
-      // In development, users can check the backend console for the OTP
-    }
-
+    // Respond IMMEDIATELY — don't wait for email
     res.json({ success: true, message: 'Verification code sent to your email.' });
+
+    // Fire-and-forget: send email in the background AFTER responding
+    sendEmail({
+      email: user.email,
+      subject: 'VIT Shuttle - Verification Code',
+      otp
+    })
+    .then(() => console.log(`✅ Email sent successfully to ${lowerEmail}`))
+    .catch((emailErr) => console.error('⚠️  Email send failed (OTP still valid, check console):', emailErr.message));
+
   } catch (err) {
     console.error('Send OTP error:', err);
     res.status(500).json({ success: false, message: 'Failed to send OTP. Please try again.' });

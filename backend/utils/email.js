@@ -1,17 +1,29 @@
 const nodemailer = require('nodemailer');
 
-const sendEmail = async (options) => {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-  });
+// Create a reusable transporter (created once, reused for all emails)
+let transporter = null;
 
+function getTransporter() {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true, // SSL — faster than STARTTLS on port 587
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
+      pool: true, // Reuse connections for faster subsequent emails
+      maxConnections: 3,
+    });
+  }
+  return transporter;
+}
+
+const sendEmail = async (options) => {
   const htmlTemplate = `
   <!DOCTYPE html>
   <html>
@@ -112,7 +124,7 @@ const sendEmail = async (options) => {
     html: htmlTemplate,
   };
 
-  await transporter.sendMail(message);
+  await getTransporter().sendMail(message);
 };
 
 module.exports = sendEmail;

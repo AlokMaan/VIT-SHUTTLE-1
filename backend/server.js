@@ -100,6 +100,21 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ── Test Email (temporary debug) ─────────────────────────────────────────────
+const sendEmail = require('./utils/email');
+app.get('/api/test-email', async (req, res) => {
+  try {
+    await sendEmail({
+      email: 'alok.maan2024@vitstudent.ac.in',
+      subject: 'VIT Shuttle - Test Email',
+      otp: '1234'
+    });
+    res.json({ success: true, message: 'Email sent successfully!' });
+  } catch (err) {
+    res.json({ success: false, message: err.message, stack: err.stack });
+  }
+});
+
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });

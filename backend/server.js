@@ -95,7 +95,8 @@ app.get('/api/health', (req, res) => {
     message: '🚌 VIT Shuttle API is running',
     version: '2.0.0',
     timestamp: new Date().toISOString(),
-    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    email: process.env.BREVO_SMTP_KEY ? 'brevo' : (process.env.EMAIL_PASS ? 'gmail' : 'none'),
   });
 });
 

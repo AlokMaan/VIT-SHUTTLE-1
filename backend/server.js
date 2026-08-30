@@ -122,11 +122,13 @@ app.use((err, req, res, next) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5002;
-app.listen(PORT, () => {
-  console.log(`\n🚌 VIT Shuttle Backend API`);
-  console.log(`📡 Running on: http://localhost:${PORT}`);
-  console.log(`🌐 API Base:   http://localhost:${PORT}/api`);
-  console.log(`⚡ Environment: ${process.env.NODE_ENV || 'development'}\n`);
-});
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🚌 VIT Shuttle Backend API`);
+    console.log(`📡 Running on: http://0.0.0.0:${PORT}`);
+    console.log(`🌐 API Base:   http://0.0.0.0:${PORT}/api`);
+    console.log(`⚡ Environment: ${process.env.NODE_ENV || 'development'}\n`);
+  });
+}
 
 module.exports = app;

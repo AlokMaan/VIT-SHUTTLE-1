@@ -2,7 +2,8 @@
  * VIT Shuttle — API Service Layer
  * Centralizes all backend communication
  */
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+const isProd = import.meta.env.PROD || window.location.hostname.includes('vercel.app');
+const BASE = isProd ? '/api' : `http://${window.location.hostname}:5002/api`;
 
 function getToken() {
   try {

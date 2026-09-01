@@ -1,6 +1,6 @@
 const nodemailer = require('nodemailer');
 
-const EMAIL_PROVIDERS = new Set(['auto', 'brevo', 'gmail']);
+const EMAIL_PROVIDERS = new Set(['auto', 'brevo', 'gmail', 'gmail-api']);
 
 class EmailConfigurationError extends Error {
   constructor(message) {
@@ -14,7 +14,7 @@ function getEmailProvider() {
   const configuredProvider = (process.env.EMAIL_PROVIDER || 'auto').trim().toLowerCase();
 
   if (!EMAIL_PROVIDERS.has(configuredProvider)) {
-    throw new EmailConfigurationError('EMAIL_PROVIDER must be auto, brevo, or gmail.');
+    throw new EmailConfigurationError('EMAIL_PROVIDER must be auto, brevo, gmail, or gmail-api.');
   }
 
   if (configuredProvider === 'brevo') {
@@ -34,6 +34,12 @@ function getEmailProvider() {
     return 'gmail';
   }
 
+  if (configuredProvider === 'gmail-api') {
+    validateGmailApiConfiguration();
+    return 'gmail-api';
+  }
+
+  if (hasGmailApiConfiguration()) return 'gmail-api';
   if (process.env.BREVO_API_KEY) {
     if (!process.env.EMAIL_USER) {
       throw new EmailConfigurationError('Brevo is configured, but EMAIL_USER must be a verified Brevo sender.');
@@ -43,6 +49,28 @@ function getEmailProvider() {
   if (process.env.EMAIL_USER && process.env.EMAIL_PASS) return 'gmail';
 
   throw new EmailConfigurationError('No email provider is configured. Add BREVO_API_KEY or Gmail credentials.');
+}
+
+function hasGmailApiConfiguration() {
+  return Boolean(
+    process.env.GMAIL_API_CLIENT_ID
+    || process.env.GMAIL_API_CLIENT_SECRET
+    || process.env.GMAIL_API_REFRESH_TOKEN
+  );
+}
+
+function validateGmailApiConfiguration() {
+  const requiredVariables = [
+    'EMAIL_USER',
+    'GMAIL_API_CLIENT_ID',
+    'GMAIL_API_CLIENT_SECRET',
+    'GMAIL_API_REFRESH_TOKEN',
+  ];
+  const missing = requiredVariables.filter((name) => !process.env[name]);
+
+  if (missing.length) {
+    throw new EmailConfigurationError(`Gmail API is selected, but ${missing.join(', ')} is missing.`);
+  }
 }
 
 function buildHtml(otp) {
@@ -109,6 +137,8 @@ async function sendViaBrevo(options, html) {
 }
 
 let transporter;
+let gmailApiAccessToken;
+let gmailApiAccessTokenExpiresAt = 0;
 
 function getGmailTransporter() {
   if (transporter) return transporter;
@@ -150,11 +180,95 @@ async function sendViaGmail(options, html) {
   return { provider: 'gmail', messageId: info.messageId };
 }
 
+function base64UrlEncode(value) {
+  return Buffer.from(value, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function assertSafeHeader(value, headerName) {
+  if (!value || /[\r\n]/.test(value)) {
+    throw new EmailConfigurationError(`${headerName} contains an invalid value.`);
+  }
+  return value;
+}
+
+function buildGmailApiMessage(options, html) {
+  const from = sender();
+  const subject = assertSafeHeader(options.subject, 'Email subject');
+  const recipient = assertSafeHeader(options.email, 'Recipient email');
+  const senderEmail = assertSafeHeader(from.email, 'Sender email');
+  const senderName = assertSafeHeader(from.name, 'Sender name').replace(/"/g, "'");
+  const encodedHtml = Buffer.from(html, 'utf8').toString('base64').match(/.{1,76}/g).join('\r\n');
+
+  return [
+    `From: ${senderName} <${senderEmail}>`,
+    `To: ${recipient}`,
+    `Reply-To: ${senderEmail}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset="UTF-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    encodedHtml,
+  ].join('\r\n');
+}
+
+async function getGmailApiAccessToken() {
+  if (gmailApiAccessToken && Date.now() < gmailApiAccessTokenExpiresAt) {
+    return gmailApiAccessToken;
+  }
+
+  const body = new URLSearchParams({
+    client_id: process.env.GMAIL_API_CLIENT_ID,
+    client_secret: process.env.GMAIL_API_CLIENT_SECRET,
+    refresh_token: process.env.GMAIL_API_REFRESH_TOKEN,
+    grant_type: 'refresh_token',
+  });
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.access_token) {
+    throw new Error(`Gmail API token error (${response.status}): ${data.error_description || data.error || 'Unable to authorize email sending.'}`);
+  }
+
+  gmailApiAccessToken = data.access_token;
+  gmailApiAccessTokenExpiresAt = Date.now() + Math.max(60, Number(data.expires_in || 3600) - 60) * 1000;
+  return gmailApiAccessToken;
+}
+
+async function sendViaGmailApi(options, html) {
+  const accessToken = await getGmailApiAccessToken();
+  const rawMessage = base64UrlEncode(buildGmailApiMessage(options, html));
+  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ raw: rawMessage }),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.id) {
+    throw new Error(`Gmail API send error (${response.status}): ${data.error?.message || 'Email was rejected.'}`);
+  }
+
+  return { provider: 'gmail-api', messageId: data.id };
+}
+
 async function sendEmail(options) {
   const provider = getEmailProvider();
   const html = buildHtml(options.otp);
 
   if (provider === 'brevo') return sendViaBrevo(options, html);
+  if (provider === 'gmail-api') return sendViaGmailApi(options, html);
   return sendViaGmail(options, html);
 }
 

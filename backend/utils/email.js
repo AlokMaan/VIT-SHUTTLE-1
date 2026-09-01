@@ -1,6 +1,50 @@
 const nodemailer = require('nodemailer');
 
-// ── Build HTML template ─────────────────────────────────────────────────────
+const EMAIL_PROVIDERS = new Set(['auto', 'brevo', 'gmail']);
+
+class EmailConfigurationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'EmailConfigurationError';
+    this.statusCode = 503;
+  }
+}
+
+function getEmailProvider() {
+  const configuredProvider = (process.env.EMAIL_PROVIDER || 'auto').trim().toLowerCase();
+
+  if (!EMAIL_PROVIDERS.has(configuredProvider)) {
+    throw new EmailConfigurationError('EMAIL_PROVIDER must be auto, brevo, or gmail.');
+  }
+
+  if (configuredProvider === 'brevo') {
+    if (!process.env.BREVO_API_KEY) {
+      throw new EmailConfigurationError('Brevo is selected, but BREVO_API_KEY is missing.');
+    }
+    if (!process.env.EMAIL_USER) {
+      throw new EmailConfigurationError('Brevo is selected, but EMAIL_USER must be a verified Brevo sender.');
+    }
+    return 'brevo';
+  }
+
+  if (configuredProvider === 'gmail') {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      throw new EmailConfigurationError('Gmail is selected, but EMAIL_USER or EMAIL_PASS is missing.');
+    }
+    return 'gmail';
+  }
+
+  if (process.env.BREVO_API_KEY) {
+    if (!process.env.EMAIL_USER) {
+      throw new EmailConfigurationError('Brevo is configured, but EMAIL_USER must be a verified Brevo sender.');
+    }
+    return 'brevo';
+  }
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) return 'gmail';
+
+  throw new EmailConfigurationError('No email provider is configured. Add BREVO_API_KEY or Gmail credentials.');
+}
+
 function buildHtml(otp) {
   return `<!DOCTYPE html>
 <html>
@@ -33,20 +77,23 @@ function buildHtml(otp) {
 </html>`;
 }
 
-// ── Brevo HTTP API (no SMTP needed — works on Render) ───────────────────────
-async function sendViaBrevo(options, html) {
-  const apiKey = process.env.BREVO_API_KEY;
-  const senderEmail = process.env.EMAIL_USER || 'maanalok05@gmail.com';
+function sender() {
+  return {
+    name: process.env.EMAIL_SENDER_NAME || 'VIT Shuttle',
+    email: process.env.EMAIL_USER.trim(),
+  };
+}
 
+async function sendViaBrevo(options, html) {
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
-      'accept': 'application/json',
-      'api-key': apiKey,
+      accept: 'application/json',
+      'api-key': process.env.BREVO_API_KEY,
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      sender: { name: 'VIT Shuttle', email: senderEmail },
+      sender: sender(),
       to: [{ email: options.email, name: options.email.split('@')[0] }],
       subject: options.subject,
       htmlContent: html,
@@ -55,51 +102,61 @@ async function sendViaBrevo(options, html) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(`Brevo API error (${response.status}): ${data.message || JSON.stringify(data)}`);
+    throw new Error(`Brevo API error (${response.status}): ${data.message || 'Email was rejected.'}`);
   }
-  return data;
+
+  return { provider: 'brevo', messageId: data.messageId };
 }
 
-// ── Gmail SMTP fallback (works locally) ─────────────────────────────────────
-let transporter = null;
+let transporter;
+
 function getGmailTransporter() {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 10000,
-      pool: true,
-    });
+  if (transporter) return transporter;
+
+  const port = Number(process.env.EMAIL_PORT || 465);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new EmailConfigurationError('EMAIL_PORT must be a valid SMTP port number.');
   }
+
+  transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port,
+    secure: port === 465,
+    requireTLS: port !== 465,
+    auth: {
+      user: process.env.EMAIL_USER.trim(),
+      pass: process.env.EMAIL_PASS.replace(/\s/g, ''),
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+  });
+
   return transporter;
 }
 
-// ── Main send function ──────────────────────────────────────────────────────
-const sendEmail = async (options) => {
-  const html = buildHtml(options.otp);
-
-  // Priority 1: Brevo HTTP API (works on Render — no SMTP needed)
-  if (process.env.BREVO_API_KEY) {
-    console.log('📬 Sending via Brevo HTTP API...');
-    await sendViaBrevo(options, html);
-    return;
-  }
-
-  // Priority 2: Gmail SMTP (works locally)
-  console.log('📬 Sending via Gmail SMTP...');
-  await getGmailTransporter().sendMail({
-    from: `VIT Shuttle <${process.env.EMAIL_USER}>`,
+async function sendViaGmail(options, html) {
+  const info = await getGmailTransporter().sendMail({
+    from: `VIT Shuttle <${sender().email}>`,
     to: options.email,
     subject: options.subject,
     html,
   });
-};
+
+  if (info.rejected && info.rejected.length) {
+    throw new Error('Gmail rejected the recipient address.');
+  }
+
+  return { provider: 'gmail', messageId: info.messageId };
+}
+
+async function sendEmail(options) {
+  const provider = getEmailProvider();
+  const html = buildHtml(options.otp);
+
+  if (provider === 'brevo') return sendViaBrevo(options, html);
+  return sendViaGmail(options, html);
+}
 
 module.exports = sendEmail;
+module.exports.getEmailProvider = getEmailProvider;

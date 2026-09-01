@@ -119,12 +119,21 @@ NODE_ENV=development
 RAZORPAY_KEY_ID=rzp_test_xxx
 RAZORPAY_KEY_SECRET=xxx
 
-# Optional - Email OTP (skip for dev, OTP prints to console)
+# Email OTP — local development or a paid Render service
+EMAIL_PROVIDER=gmail
 EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
+EMAIL_PORT=465
 EMAIL_USER=your@gmail.com
-EMAIL_PASS=app-password
+EMAIL_PASS=your-16-character-google-app-password
+
+# Email OTP — required for a free Render service (SMTP is blocked there)
+# Set EMAIL_USER to a sender address you have verified in Brevo.
+# Do not use BREVO_SMTP_KEY with this project; it uses Brevo's HTTPS API.
+# EMAIL_PROVIDER=brevo
+# BREVO_API_KEY=xkeysib-...
 ```
+
+Google requires 2-Step Verification before you can create an app password. Enter the 16-character app password as `EMAIL_PASS` (spaces are safely ignored by the backend). On Render Free, Gmail SMTP cannot connect: set `EMAIL_PROVIDER=brevo`, add a Brevo API key, and verify `EMAIL_USER` as a Brevo sender. The app reports a delivery error instead of falsely claiming that an OTP was sent.
 
 ### 3. Seed the database
 

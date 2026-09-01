@@ -16,8 +16,13 @@ const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/users');
 const cardRoutes = require('./routes/card');
 const publicRoutes = require('./routes/public');
+const { getEmailProvider } = require('./utils/email');
 
 const app = express();
+
+// Render terminates HTTPS before forwarding requests to this Express process.
+// Trust exactly that proxy so rate limiting can use each visitor's real IP.
+app.set('trust proxy', 1);
 
 // ── Security Middleware ──────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
@@ -90,29 +95,21 @@ app.use('/api/public', publicRoutes);
 
 // ── Health Check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
+  let email = 'misconfigured';
+  try {
+    email = getEmailProvider();
+  } catch (error) {
+    console.warn('Email configuration:', error.message);
+  }
+
   res.json({
     success: true,
     message: '🚌 VIT Shuttle API is running',
     version: '2.0.0',
     timestamp: new Date().toISOString(),
     db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    email: process.env.BREVO_API_KEY ? 'brevo-http' : (process.env.EMAIL_PASS ? 'gmail-smtp' : 'none'),
+    email,
   });
-});
-
-// ── Test Email (temporary debug) ─────────────────────────────────────────────
-const sendEmail = require('./utils/email');
-app.get('/api/test-email', async (req, res) => {
-  try {
-    await sendEmail({
-      email: 'alok.maan2024@vitstudent.ac.in',
-      subject: 'VIT Shuttle - Test Email',
-      otp: '1234'
-    });
-    res.json({ success: true, message: 'Email sent successfully!' });
-  } catch (err) {
-    res.json({ success: false, message: err.message, stack: err.stack });
-  }
 });
 
 // ── 404 Handler ───────────────────────────────────────────────────────────────

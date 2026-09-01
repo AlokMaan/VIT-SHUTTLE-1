@@ -24,24 +24,24 @@ router.post('/signup', async (req, res) => {
 
     const user = await User.create({ name, email, password, regNo, phone, role: assignedRole });
 
-    // Generate 4 digit OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const otp = crypto.randomInt(1000, 10000).toString();
     user.otp = otp;
-    user.otpExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.otpExpire = Date.now() + 10 * 60 * 1000;
     await user.save({ validateBeforeSave: false });
 
-    // Always log OTP for development
-    console.log(`\n📧 Signup OTP for ${user.email}: ${otp}\n`);
-
-    // Try sending email, don't fail if SMTP is down
     try {
-      await sendEmail({
+      const delivery = await sendEmail({
         email: user.email,
         subject: 'VIT Shuttle - Verification Code',
         otp
       });
+      console.info(`Signup verification email accepted by ${delivery.provider}.`);
     } catch (emailErr) {
-      console.error('⚠️  Signup email failed (OTP still valid):', emailErr.message);
+      console.error('Signup verification email failed:', emailErr.message);
+      return res.status(emailErr.statusCode || 502).json({
+        success: false,
+        message: 'Your account was created, but we could not deliver the verification code. Please use Sign In to request a new code.'
+      });
     }
 
     res.status(201).json({
@@ -215,26 +215,26 @@ router.post('/send-otp', async (req, res) => {
       user = await User.create({ name, email: lowerEmail, role: 'student' });
     }
 
-    // Generate 4 digit OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const otp = crypto.randomInt(1000, 10000).toString();
     user.otp = otp;
-    user.otpExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.otpExpire = Date.now() + 10 * 60 * 1000;
     await user.save({ validateBeforeSave: false });
 
-    // Always log OTP to console
-    console.log(`\n📧 OTP for ${lowerEmail}: ${otp}\n`);
-
-    // Respond IMMEDIATELY
-    res.json({ success: true, message: 'Verification code sent to your email.' });
-
-    // Fire-and-forget: send email in the background
-    sendEmail({
-      email: user.email,
-      subject: 'VIT Shuttle - Verification Code',
-      otp
-    })
-    .then(() => console.log(`✅ Email sent successfully to ${lowerEmail}`))
-    .catch((emailErr) => console.error('⚠️  Email send failed:', emailErr.message));
+    try {
+      const delivery = await sendEmail({
+        email: user.email,
+        subject: 'VIT Shuttle - Verification Code',
+        otp
+      });
+      console.info(`OTP email accepted by ${delivery.provider}.`);
+      res.json({ success: true, message: 'Verification code sent to your email.' });
+    } catch (emailErr) {
+      console.error('OTP email failed:', emailErr.message);
+      res.status(emailErr.statusCode || 502).json({
+        success: false,
+        message: 'We could not send the verification code. Please try again in a moment.'
+      });
+    }
 
   } catch (err) {
     console.error('Send OTP error:', err);

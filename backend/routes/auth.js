@@ -5,6 +5,37 @@ const User = require('../models/User');
 const { protect } = require('../middleware/auth');
 const sendEmail = require('../utils/email');
 
+const OTP_TTL_MS = 10 * 60 * 1000;
+
+function getOtpSecret() {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is required to create verification codes.');
+  }
+  return process.env.JWT_SECRET;
+}
+
+function hashOtp(otp) {
+  return crypto
+    .createHmac('sha256', getOtpSecret())
+    .update(otp)
+    .digest('hex');
+}
+
+function assignOtp(user) {
+  const otp = crypto.randomInt(1000, 10000).toString();
+  user.otpHash = hashOtp(otp);
+  user.otpExpire = Date.now() + OTP_TTL_MS;
+  return otp;
+}
+
+function hasMatchingOtp(user, otp) {
+  if (!/^\d{4}$/.test(otp) || !user.otpHash) return false;
+
+  const expected = Buffer.from(user.otpHash, 'hex');
+  const received = Buffer.from(hashOtp(otp), 'hex');
+  return expected.length === received.length && crypto.timingSafeEqual(expected, received);
+}
+
 // ── POST /api/auth/signup ─────────────────────────────────────────────────────
 router.post('/signup', async (req, res) => {
   try {
@@ -24,9 +55,7 @@ router.post('/signup', async (req, res) => {
 
     const user = await User.create({ name, email, password, regNo, phone, role: assignedRole });
 
-    const otp = crypto.randomInt(1000, 10000).toString();
-    user.otp = otp;
-    user.otpExpire = Date.now() + 10 * 60 * 1000;
+    const otp = assignOtp(user);
     await user.save({ validateBeforeSave: false });
 
     try {
@@ -215,9 +244,7 @@ router.post('/send-otp', async (req, res) => {
       user = await User.create({ name, email: lowerEmail, role: 'student' });
     }
 
-    const otp = crypto.randomInt(1000, 10000).toString();
-    user.otp = otp;
-    user.otpExpire = Date.now() + 10 * 60 * 1000;
+    const otp = assignOtp(user);
     await user.save({ validateBeforeSave: false });
 
     try {
@@ -248,18 +275,17 @@ router.post('/verify-otp', async (req, res) => {
     const { email, otp } = req.body;
     if (!email || !otp) return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
 
-    const user = await User.findOne({ 
+    const user = await User.findOne({
       email: email.toLowerCase(),
-      otp,
       otpExpire: { $gt: Date.now() }
-    });
+    }).select('+otpHash');
 
-    if (!user) {
+    if (!user || !hasMatchingOtp(user, otp)) {
       return res.status(400).json({ success: false, message: 'Invalid or expired OTP.' });
     }
 
     user.isVerified = true;
-    user.otp = undefined;
+    user.otpHash = undefined;
     user.otpExpire = undefined;
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });

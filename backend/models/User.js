@@ -44,7 +44,8 @@ const userSchema = new mongoose.Schema({
   resetPasswordToken: String,
   resetPasswordExpire: Date,
   lastLogin: { type: Date },
-  otp: { type: String },
+  // OTPs are stored as a keyed hash, never as the readable code itself.
+  otpHash: { type: String, select: false },
   otpExpire: { type: Date },
   totalRides: { type: Number, default: 0 },
   // Shuttle Card

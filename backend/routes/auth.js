@@ -257,9 +257,12 @@ router.post('/send-otp', async (req, res) => {
       res.json({ success: true, message: 'Verification code sent to your email.' });
     } catch (emailErr) {
       console.error('OTP email failed:', emailErr.message);
+      const hint = emailErr.message.includes('IP address')
+        ? 'Email provider is blocking this server IP. Check your Brevo authorised IPs.'
+        : 'We could not send the verification code. Please try again in a moment.';
       res.status(emailErr.statusCode || 502).json({
         success: false,
-        message: 'We could not send the verification code. Please try again in a moment.'
+        message: hint
       });
     }
 

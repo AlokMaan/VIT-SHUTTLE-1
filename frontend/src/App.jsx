@@ -15,6 +15,7 @@ import AdminGuard from './components/AdminGuard';
 // Auth pages (eagerly loaded - small, critical path)
 import SignIn from './pages/SignIn';
 import OtpVerification from './pages/OtpVerification';
+import SignUp from './pages/SignUp';
 
 // Public pages (lazy loaded)
 const RouteList = lazy(() => import('./pages/public/RouteList'));
@@ -115,7 +116,7 @@ export default function App() {
           {/* ── Home → Sign In (or redirect to portal if logged in) */}
           <Route index element={<HomeRedirect />} />
           <Route path="signin" element={<HomeRedirect />} />
-          <Route path="signup" element={<Navigate to="/" replace />} />
+          <Route path="signup" element={<SignUp />} />
           <Route path="verify-otp" element={<OtpVerification />} />
 
           {/* ── Public info pages (with navbar/footer layout) ──── */}

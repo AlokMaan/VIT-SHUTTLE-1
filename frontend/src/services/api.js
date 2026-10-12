@@ -40,6 +40,15 @@ async function request(path, opts = {}) {
 
 // ── Auth ──────────────────────────────────────────────
 export const auth = {
+  register: (payload) =>
+    request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
+
+  loginById: (regNo, password) =>
+    request('/auth/login-id', { method: 'POST', body: JSON.stringify({ regNo, password }) }),
+
+  logout: () =>
+    request('/auth/logout', { method: 'POST' }),
+
   login: (email, password) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
 

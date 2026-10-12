@@ -1,99 +1,212 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { auth } from '../services/api';
+import { auth as authApi } from '../services/api';
+import './SignUp.css';
 
 export default function SignUp() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', regNo: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({ name: '', regNo: '', email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [shakeError, setShakeError] = useState(false);
 
-  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  useEffect(() => { setMounted(true); }, []);
+
+  const set = (k) => (e) => {
+    let val = e.target.value;
+    if (k === 'regNo') val = val.toUpperCase();
+    setForm(f => ({ ...f, [k]: val }));
+    setFieldErrors(fe => ({ ...fe, [k]: '' }));
+    setError('');
+  };
+
+  const validate = () => {
+    const errs = {};
+    if (!form.name.trim()) errs.name = 'Full name is required';
+    if (!form.regNo.trim()) errs.regNo = 'Registration number is required';
+    else if (!/^[0-9]{2}[A-Z]{3}[0-9]{4,5}$/.test(form.regNo.trim())) errs.regNo = 'Invalid format (e.g., 22BCE1234)';
+    if (!form.email.trim()) errs.email = 'Email is required';
+    else if (!form.email.endsWith('@vitstudent.ac.in') && !form.email.endsWith('@vit.ac.in')) errs.email = 'Only @vitstudent.ac.in or @vit.ac.in emails';
+    if (!form.password) errs.password = 'Password is required';
+    else if (form.password.length < 8) errs.password = 'Minimum 8 characters';
+    if (!form.confirmPassword) errs.confirmPassword = 'Please confirm your password';
+    else if (form.password !== form.confirmPassword) errs.confirmPassword = 'Passwords do not match';
+    return errs;
+  };
+
+  const showError = (msg) => {
+    setError(msg);
+    setShakeError(true);
+    setTimeout(() => setShakeError(false), 600);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!form.name || !form.email || !form.regNo || !form.password) { setError('All fields are required'); return; }
-    if (!form.email.endsWith('@vitstudent.ac.in')) { setError('Only @vitstudent.ac.in emails are allowed'); return; }
-    if (form.password.length < 6) { setError('Password must be at least 6 characters'); return; }
-    if (form.password !== form.confirmPassword) { setError('Passwords do not match'); return; }
+    setFieldErrors({});
+
+    const errs = validate();
+    if (Object.keys(errs).length) {
+      setFieldErrors(errs);
+      showError(Object.values(errs)[0]);
+      return;
+    }
 
     setLoading(true);
     try {
-      const data = await auth.signup({ name: form.name, email: form.email, regNo: form.regNo, password: form.password });
-      // Remove setAuth here since they need to verify OTP first
-      localStorage.setItem('verifyEmail', form.email);
-      navigate('/verify-otp', { state: { email: form.email } });
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+      await authApi.register({
+        name: form.name.trim(),
+        regNo: form.regNo.trim(),
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+        confirmPassword: form.confirmPassword
+      });
+      navigate('/', { state: { signupSuccess: true } });
+    } catch (err) {
+      showError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="auth-wrapper">
-      <div className="auth-card">
-        <div className="auth-brand">
-          <div className="nav-brand-icon"><span className="material-symbols-outlined">directions_bus</span></div>
-          <div className="nav-brand-text">
-            <span className="nav-brand-name" style={{ fontSize: '1.15rem' }}>VIT Shuttle</span>
-            <span className="nav-brand-sub">Campus Transit System</span>
+    <div className="su-root">
+      {/* Background orbs */}
+      <div className="su-bg">
+        <div className="su-orb su-orb-1" />
+        <div className="su-orb su-orb-2" />
+        <div className="su-orb su-orb-3" />
+      </div>
+
+      <div className={`su-card ${mounted ? 'su-show' : ''}`}>
+        {/* Logo */}
+        <div className="su-logo">
+          <div className="su-logo-icon">
+            <span className="material-symbols-outlined">directions_bus</span>
+          </div>
+          <div>
+            <div className="su-logo-name">Shuttle<span>AI</span></div>
+            <div className="su-logo-sub">VIT Vellore Campus Transit</div>
           </div>
         </div>
-        <div className="auth-title">Create Student Account</div>
-        <div className="auth-subtitle">Use your VIT student email to register</div>
+
+        <h2 className="su-title">Create Student Account</h2>
+        <p className="su-subtitle">Join VIT Shuttle network</p>
 
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Full Name</label>
-            <div className="auth-input-group">
-              <div className="auth-input-icon"><span className="material-symbols-outlined">person</span></div>
-              <input placeholder="Your full name" value={form.name} onChange={set('name')} />
+          <div className="su-field">
+            <label className="su-label">Full Name</label>
+            <div className={`su-input-wrap ${fieldErrors.name ? 'su-input-error' : ''}`}>
+              <span className="material-symbols-outlined su-input-icon">person</span>
+              <input
+                type="text"
+                placeholder="Your full name"
+                value={form.name}
+                onChange={set('name')}
+                className="su-input"
+                autoFocus
+              />
             </div>
+            {fieldErrors.name && <div className="su-field-error">{fieldErrors.name}</div>}
           </div>
-          <div className="form-group">
-            <label className="form-label">Student Email</label>
-            <div className="auth-input-group">
-              <div className="auth-input-icon"><span className="material-symbols-outlined">school</span></div>
-              <input type="email" placeholder="yourname@vitstudent.ac.in" value={form.email} onChange={set('email')} />
+
+          <div className="su-field">
+            <label className="su-label">Registration Number</label>
+            <div className={`su-input-wrap ${fieldErrors.regNo ? 'su-input-error' : ''}`}>
+              <span className="material-symbols-outlined su-input-icon">badge</span>
+              <input
+                type="text"
+                placeholder="22BCE1234"
+                value={form.regNo}
+                onChange={set('regNo')}
+                className="su-input"
+              />
             </div>
-            <div style={{ fontSize: '.68rem', color: 'var(--text-4)', marginTop: '.15rem' }}>Only @vitstudent.ac.in emails accepted</div>
+            {fieldErrors.regNo && <div className="su-field-error">{fieldErrors.regNo}</div>}
           </div>
-          <div className="form-group">
-            <label className="form-label">Registration Number</label>
-            <div className="auth-input-group">
-              <div className="auth-input-icon"><span className="material-symbols-outlined">badge</span></div>
-              <input placeholder="22BCE1234" value={form.regNo} onChange={set('regNo')} />
+
+          <div className="su-field">
+            <label className="su-label">Student Email</label>
+            <div className={`su-input-wrap ${fieldErrors.email ? 'su-input-error' : ''}`}>
+              <span className="material-symbols-outlined su-input-icon">mail</span>
+              <input
+                type="email"
+                placeholder="yourname@vitstudent.ac.in"
+                value={form.email}
+                onChange={set('email')}
+                className="su-input"
+              />
             </div>
+            <div className="su-hint">
+              <span className="material-symbols-outlined">info</span>
+              Only @vitstudent.ac.in or @vit.ac.in emails
+            </div>
+            {fieldErrors.email && <div className="su-field-error">{fieldErrors.email}</div>}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
-            <div className="form-group">
-              <label className="form-label">Password</label>
-              <div className="auth-input-group">
-                <div className="auth-input-icon"><span className="material-symbols-outlined">lock</span></div>
-                <input type={showPw ? 'text' : 'password'} placeholder="Min. 6 chars" value={form.password} onChange={set('password')} />
+
+          <div className="su-row">
+            <div className="su-field">
+              <label className="su-label">Password</label>
+              <div className={`su-input-wrap ${fieldErrors.password ? 'su-input-error' : ''}`}>
+                <span className="material-symbols-outlined su-input-icon">lock</span>
+                <input
+                  type={showPw ? 'text' : 'password'}
+                  placeholder="Min. 8 chars"
+                  value={form.password}
+                  onChange={set('password')}
+                  className="su-input"
+                />
               </div>
+              {fieldErrors.password && <div className="su-field-error">{fieldErrors.password}</div>}
             </div>
-            <div className="form-group">
-              <label className="form-label">Confirm</label>
-              <div className="auth-input-group">
-                <div className="auth-input-icon"><span className="material-symbols-outlined">lock</span></div>
-                <input type={showPw ? 'text' : 'password'} placeholder="Re-enter" value={form.confirmPassword} onChange={set('confirmPassword')} />
+            <div className="su-field">
+              <label className="su-label">Confirm</label>
+              <div className={`su-input-wrap ${fieldErrors.confirmPassword ? 'su-input-error' : ''}`}>
+                <span className="material-symbols-outlined su-input-icon">lock</span>
+                <input
+                  type={showPw ? 'text' : 'password'}
+                  placeholder="Re-enter"
+                  value={form.confirmPassword}
+                  onChange={set('confirmPassword')}
+                  className="su-input"
+                />
               </div>
+              {fieldErrors.confirmPassword && <div className="su-field-error">{fieldErrors.confirmPassword}</div>}
             </div>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '.4rem', fontSize: '.76rem', color: 'var(--text-3)', marginBottom: '1rem', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showPw} onChange={() => setShowPw(!showPw)} style={{ accentColor: 'var(--primary)' }} /> Show passwords
+
+          <label className="su-show-pw">
+            <input type="checkbox" checked={showPw} onChange={() => setShowPw(!showPw)} />
+            Show passwords
           </label>
-          {error && <div className="form-error" style={{ marginBottom: '.75rem', display: 'flex', alignItems: 'center', gap: '.3rem' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '.9rem' }}>error</span>{error}
-          </div>}
-          <button className="auth-btn" type="submit" disabled={loading}>
-            {loading
-              ? <span className="material-symbols-outlined" style={{ animation: 'spin 1s linear infinite', fontSize: '1rem' }}>progress_activity</span>
-              : <>Create Account <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>arrow_forward</span></>}
+
+          {error && (
+            <div className={`su-error ${shakeError ? 'su-shake' : ''}`}>
+              <span className="material-symbols-outlined">error</span>
+              {error}
+            </div>
+          )}
+
+          <button className="su-submit" type="submit" disabled={loading}>
+            {loading ? (
+              <span className="material-symbols-outlined su-spin">progress_activity</span>
+            ) : (
+              <>Create Account <span className="material-symbols-outlined">arrow_forward</span></>
+            )}
           </button>
         </form>
-        <div className="auth-footer">Already registered? <Link to="/signin">Sign in</Link></div>
+
+        <div className="su-footer-link">
+          Already registered? <Link to="/">Sign in</Link>
+        </div>
+
+        <div className="su-footer">
+          <span className="material-symbols-outlined">verified</span>
+          Secure Registration · VIT Shuttle
+        </div>
       </div>
     </div>
   );

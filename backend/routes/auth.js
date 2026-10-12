@@ -36,6 +36,133 @@ function hasMatchingOtp(user, otp) {
   return expected.length === received.length && crypto.timingSafeEqual(expected, received);
 }
 
+// ── POST /api/auth/register ───────────────────────────────────────────────────
+router.post('/register', async (req, res) => {
+  try {
+    const { name, regNo, email, password, confirmPassword } = req.body;
+
+    if (!name || !regNo || !email || !password || !confirmPassword) {
+      return res.status(400).json({ success: false, message: 'All fields are required.' });
+    }
+
+    const formattedRegNo = regNo.trim().toUpperCase();
+    const regNoRegex = /^[0-9]{2}[A-Z]{3}[0-9]{4,5}$/;
+    if (!regNoRegex.test(formattedRegNo)) {
+      return res.status(400).json({ success: false, message: 'Registration number must match pattern (e.g., 22BCE1234).' });
+    }
+
+    const formattedEmail = email.trim().toLowerCase();
+    if (!formattedEmail.endsWith('@vitstudent.ac.in') && !formattedEmail.endsWith('@vit.ac.in')) {
+      return res.status(400).json({ success: false, message: 'Email must end with @vitstudent.ac.in or @vit.ac.in.' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ success: false, message: 'Passwords do not match.' });
+    }
+
+    const existingRegNo = await User.findOne({ regNo: formattedRegNo });
+    if (existingRegNo) {
+      return res.status(400).json({ success: false, message: 'An account with this registration number already exists.' });
+    }
+
+    const existingEmail = await User.findOne({ email: formattedEmail });
+    if (existingEmail) {
+      return res.status(400).json({ success: false, message: 'An account with this email already exists.' });
+    }
+
+    await User.create({
+      name: name.trim(),
+      regNo: formattedRegNo,
+      email: formattedEmail,
+      password,
+      role: 'student',
+      isVerified: true
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Registration successful! Please sign in.'
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern || {})[0];
+      return res.status(400).json({
+        success: false,
+        message: `An account with this ${field === 'regNo' ? 'registration number' : 'email'} already exists.`
+      });
+    }
+    if (err.name === 'ValidationError') {
+      const msg = Object.values(err.errors)[0].message;
+      return res.status(400).json({ success: false, message: msg });
+    }
+    console.error('Register error:', err);
+    res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+  }
+});
+
+// ── POST /api/auth/login-id ───────────────────────────────────────────────────
+router.post('/login-id', async (req, res) => {
+  try {
+    const { regNo, password } = req.body;
+
+    if (!regNo || !password) {
+      return res.status(400).json({ success: false, message: 'Registration number and password are required.' });
+    }
+
+    const formattedRegNo = regNo.trim().toUpperCase();
+    const user = await User.findOne({ regNo: formattedRegNo }).select('+password');
+
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'No account found with this registration number' });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ success: false, message: 'Account suspended' });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Incorrect password' });
+    }
+
+    user.lastLogin = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    const token = user.generateToken();
+
+    res.json({
+      success: true,
+      message: `Welcome back, ${user.name.split(' ')[0]}! 👋`,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        regNo: user.regNo,
+        phone: user.phone,
+        department: user.department,
+        hostel: user.hostel
+      }
+    });
+  } catch (err) {
+    console.error('Login-id error:', err);
+    res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+  }
+});
+
+// ── POST /api/auth/logout ─────────────────────────────────────────────────────
+router.post('/logout', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Logged out successfully.'
+  });
+});
+
 // ── POST /api/auth/signup ─────────────────────────────────────────────────────
 router.post('/signup', async (req, res) => {
   try {
@@ -94,15 +221,22 @@ router.post('/signup', async (req, res) => {
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, regNo, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    if ((!email && !regNo) || !password) {
+      return res.status(400).json({ success: false, message: 'Registration number / Email and password are required.' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    let query = {};
+    if (regNo) {
+      query = { regNo: regNo.trim().toUpperCase() };
+    } else {
+      query = { email: email.toLowerCase().trim() };
+    }
+
+    const user = await User.findOne(query).select('+password');
     if (!user) {
-      return res.status(401).json({ success: false, message: 'No account found with this email. Please sign up first.' });
+      return res.status(401).json({ success: false, message: regNo ? 'No account found with this registration number. Please sign up first.' : 'No account found with this email. Please sign up first.' });
     }
 
     if (!user.isActive) {

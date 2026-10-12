@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    minlength: [6, 'Password must be at least 6 characters'],
+    minlength: [8, 'Password must be at least 8 characters'],
     select: false
   },
   role: {
@@ -32,7 +32,9 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     uppercase: true,
-    sparse: true
+    unique: true,
+    sparse: true,
+    match: [/^[0-9]{2}[A-Z]{3}[0-9]{4,5}$/, 'Registration number must match pattern (e.g., 22BCE1234)']
   },
   phone: { type: String, trim: true },
   avatar: { type: String, default: '' },

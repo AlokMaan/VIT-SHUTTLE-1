@@ -11,10 +11,14 @@ services:
       - key: NODE_ENV
         value: production
       - key: MONGODB_URI
-        fromDatabase: false
+        sync: false
       - key: JWT_SECRET
-        fromDatabase: false
+        sync: false
+      # Render Free does not reliably allow outbound SMTP. Use Brevo's HTTPS API
+      # for OTP delivery instead, and add the key in the Render dashboard.
+      - key: EMAIL_PROVIDER
+        value: brevo
       - key: EMAIL_USER
-        fromDatabase: false
-      - key: EMAIL_PASS
-        fromDatabase: false
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false

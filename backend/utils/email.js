@@ -155,7 +155,7 @@ function getGmailTransporter() {
     requireTLS: port !== 465,
     auth: {
       user: process.env.EMAIL_USER.trim(),
-      pass: process.env.EMAIL_PASS.replace(/\s/g, ''),
+      pass: process.env.EMAIL_PASS.trim(),
     },
     connectionTimeout: 10000,
     greetingTimeout: 10000,
